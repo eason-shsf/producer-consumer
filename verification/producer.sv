@@ -34,9 +34,9 @@ class producer_driver extends uvm_driver #(producer_item);
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
         if (!uvm_config_db #(virtual producer_if)::get(null, "*", "producer_if", u_producer_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+            `uvm_fatal(get_type_name(), "failed to get producer_if")
 		if (!uvm_config_db #(virtual sys_if)::get(null, "*", "sys_if", u_sys_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+            `uvm_fatal(get_type_name(), "failed to get sys_if")
     endfunction
 
     task reset_check();
@@ -60,7 +60,7 @@ class producer_driver extends uvm_driver #(producer_item);
 				repeat (tr.delay) @(posedge u_producer_if.wclk); 
                 u_producer_if.wpush     = 'b1;
                 u_producer_if.wdata = tr.wdata;
-                $display("haha-----------");
+            `uvm_info(get_type_name(), $sformatf(" producer_item: \n%s", this.tr.sprint()), UVM_LOW)
                 seq_item_port.item_done();
             end
         end
@@ -92,9 +92,9 @@ class producer_monitor extends uvm_monitor;
         super.build_phase(phase);
         ap = new("producer_monitor_ap", this);
         if (!uvm_config_db #(virtual producer_if)::get(null, "*", "producer_if", u_producer_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+            `uvm_fatal(get_type_name(), "failed to get producer _if")
 		if (!uvm_config_db #(virtual sys_if)::get(null, "*", "sys_if", u_sys_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+            `uvm_fatal(get_type_name(), "failed to get sys_if")
     endfunction
 
     task run_phase(uvm_phase phase);
@@ -106,6 +106,7 @@ class producer_monitor extends uvm_monitor;
 			begin
                 tr.wdata = u_producer_if.wdata;	
                 ap.write(tr);
+              `uvm_info(get_type_name(), $sformatf(" producer_item: \n%s", this.tr.sprint()), UVM_LOW)
 			end
 		end 
     endtask

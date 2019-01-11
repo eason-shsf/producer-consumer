@@ -41,3 +41,8 @@ class test_1 extends top_test_base;
       	
     endtask    
 endclass : test_1  
+
+//uvm_fatal(get_type_name(), "build_phase(): xxx")
+//uvm_info(get_type_name(), $sformat("build_phase(): cfg.sprint(): \n%s", this.cfg.sprint()), UVM_HIGH)
+//+UVM_VERBOSITY=UVM_NONE
+//+UVM_TESTNAME=xxx

@@ -1,31 +1,32 @@
 
-class producer_item extends uvm_sequence_item;
-  rand logic [15 : 0] wdata;
+class consumer_item extends uvm_sequence_item;
+  rand logic [15 : 0] rdata;
   rand int delay;
-  function new(string name = "producer_item");
+  function new(string name = "consumer_item");
         super.new(name);
     endfunction
 
-  `uvm_object_utils_begin(producer_item)
-		`uvm_field_int(wdata, UVM_ALL_ON)
+  `uvm_object_utils_begin(consumer_item)
+      `uvm_field_int(rdata, UVM_ALL_ON)
   `uvm_object_utils_end
 endclass 
 
-
-class producer_sequencer extends uvm_sequencer #(producer_item);
-  `uvm_component_utils(producer_sequencer)
+class consumer_sequencer extends uvm_sequencer #(consumer_item);
+  `uvm_component_utils(consumer_sequencer)
   
 	function new(string name, uvm_component parent);
 		super.new(name, parent);
 	endfunction
-endclass : producer_sequencer
+endclass : consumer_sequencer
 
-class producer_driver extends uvm_driver #(producer_item);
-  `uvm_component_utils(producer_driver)
 
-    virtual producer_if u_producer_if; 
+
+class consumer_driver extends uvm_driver #(consumer_item);
+  `uvm_component_utils(consumer_driver)
+
+    virtual consumer_if u_consumer_if; 
 	virtual sys_if u_sys_if;
-    producer_item tr; 
+    consumer_item tr; 
     
     function new(string name, uvm_component parent);
         super.new(name, parent); 
@@ -33,7 +34,7 @@ class producer_driver extends uvm_driver #(producer_item);
    
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
-        if (!uvm_config_db #(virtual producer_if)::get(null, "*", "producer_if", u_producer_if))
+        if (!uvm_config_db #(virtual consumer_if)::get(null, "*", "consumer_if", u_consumer_if))
             `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
 		if (!uvm_config_db #(virtual sys_if)::get(null, "*", "sys_if", u_sys_if))
             `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
@@ -41,27 +42,26 @@ class producer_driver extends uvm_driver #(producer_item);
 
     task reset_check();
         forever begin
-            @(posedge u_producer_if.wclk);
+          @(posedge u_consumer_if.rclk);
 
-            if (!sys_if.wrst_n) begin
-                u_producer_if.wpush = 'b0; 
-				u_producer_if.wdata = 'b0; 
+          if (!sys_if.rrst_n) begin
+                u_consumer_if.rpop = 'b0; 
             end
         end
     endtask
 
-    task send_data();
+    task recv_data(ref consumer_item tr);
         forever begin
-            @(posedge u_producer_if.wclk); 
+            @(posedge u_consumer_if.rclk); 
             
-          if (sys_if.wrst_n & !u_producer_if.wfull) begin 
+          if (sys_if.rrst_n & !u_consumer_if.rempty) begin 
                 seq_item_port.get_next_item(tr); 
                 #1;
-				repeat (tr.delay) @(posedge u_producer_if.wclk); 
-                u_producer_if.wpush     = 'b1;
-                u_producer_if.wdata = tr.wdata;
-                $display("haha-----------");
+            repeat (tr.delay) @(posedge u_consumer_if.rclk); 
+                u_consumer_if.rpop     = 'b1;
+            	tr.rdata = u_consumer_if.rdata; 
                 seq_item_port.item_done();
+				`uvm_info(get_type_name(), $sformatf(" consumer_item: \n%s", this.tr.sprint()), UVM_LOW)
             end
         end
     endtask
@@ -69,20 +69,18 @@ class producer_driver extends uvm_driver #(producer_item);
     task run_phase(uvm_phase phase);
         fork
             reset_check();
-            send_data();
+            recv_data();
         join 
     endtask 
-endclass : producer_driver
+endclass : consumer_driver
 
-
-      
-class producer_monitor extends uvm_monitor;
-    `uvm_component_utils(producer_monitor)
+class consumer_monitor extends uvm_monitor;
+    `uvm_component_utils(consumer_monitor)
     
-    virtual producer_if u_producer_if; 
+    virtual consumer_if u_consumer_if; 
 	virtual sys_if u_sys_if;
-  	uvm_analysis_port #(producer_item) ap;
-    producer_item tr;
+  	uvm_analysis_port #(consumer_item) ap;
+    consumer_item tr;
 
     function new(string name, uvm_component parent);
         super.new(name, parent); 
@@ -90,40 +88,41 @@ class producer_monitor extends uvm_monitor;
 
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
-        ap = new("producer_monitor_ap", this);
-        if (!uvm_config_db #(virtual producer_if)::get(null, "*", "producer_if", u_producer_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+        ap = new("consumer_monitor_ap", this);
+        if (!uvm_config_db #(virtual consumer_if)::get(null, "*", "consumer_if", u_consumer_if))
+            `uvm_fatal(get_type_name(), "failed to get consumer_if")
 		if (!uvm_config_db #(virtual sys_if)::get(null, "*", "sys_if", u_sys_if))
-            `uvm_info("DATA_DRIVER", "uvm_config_db::get failed!", UVM_HIGH)
+            `uvm_fatal(get_type_name(), "failed to get sys_if")
     endfunction
 
     task run_phase(uvm_phase phase);
 	forever 
 		begin
-			@(posedge u_sys_if.wclk)	
-			tr = producer_item::type_id::create("tr");
-			if (u_sys_if.wrst_n & !u_producer_if.wfull & u_producer_if.wpush)
+			@(posedge u_sys_if.rclk)	
+			tr = consumer_item::type_id::create("tr");
+          if (u_sys_if.rrst_n & !u_consumer_if.rempty & u_consumer_if.rpop)
 			begin
-                tr.wdata = u_producer_if.wdata;	
+                tr.rdata = u_consumer_if.rdata;	
                 ap.write(tr);
+				`uvm_info(get_type_name(), $sformatf(" consumer_item: \n%s", this.tr.sprint()), UVM_LOW)
 			end
 		end 
     endtask
-endclass : producer_monitor
+endclass : consumer_monitor
 
 /***********************************************
 * agent 
 ***********************************************/
 
-class producer_agent extends uvm_component;
-    `uvm_component_utils(producer_agent)
+class consumer_agent extends uvm_component;
+    `uvm_component_utils(consumer_agent)
     
-  	uvm_analysis_port #(producer_item) ap; 
+  	uvm_analysis_port #(consumer_item) ap; 
     
 	
-	producer_sequencer u_producer_sequencer;
-	producer_driver    u_producer_driver;
-	producer_monitor   u_producer_monitor;
+	consumer_sequencer u_consumer_sequencer;
+	consumer_driver    u_consumer_driver;
+	consumer_monitor   u_consumer_monitor;
 	
 	
     function new(string name, uvm_component parent);
@@ -131,16 +130,16 @@ class producer_agent extends uvm_component;
     endfunction
 
     function void build_phase(uvm_phase phase);
-        u_producer_driver     = producer_driver   ::type_id::create("producer_driver", this); 
-        u_producer_sequencer  = producer_sequencer::type_id::create("producer_sequencer", this); 
-        u_producer_monitor    = producer_monitor  ::type_id::create("producer_monitor", this);
+        u_consumer_driver     = consumer_driver   ::type_id::create("consumer_driver", this); 
+        u_consumer_sequencer  = consumer_sequencer::type_id::create("consumer_sequencer", this); 
+        u_consumer_monitor    = consumer_monitor  ::type_id::create("consumer_monitor", this);
     endfunction
 
 
     function void connect_phase(uvm_phase phase);
         super.connect_phase(phase);
-        u_producer_driver.seq_item_port.connect(u_producer_sequencer.seq_item_export);
-        ap = u_producer_monitor.ap; 
+      u_consumer_driver.seq_item_port.connect(u_consumer_sequencer.seq_item_export);
+        ap = u_consumer_monitor.ap; 
     endfunction
-endclass : producer_agent 
+endclass : consumer_agent 
 

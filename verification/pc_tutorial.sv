@@ -90,3 +90,26 @@ module tb;
 	...
   end
 endmodule 
+
+
+
+// ----------------
+
+interface sys_if;
+  logic wclk,rclk,wrst_n,rrst_n;
+endinterface : sys_if
+
+interface producer_if(input logic wclk, input logic wrst_n);
+  logic wpush;
+  logic wfull;
+  logic [15:0] wdata;
+endinterface : producer_if
+
+interface consumer_if(input logic rclk, input logic rrst_n);
+  logic rpop;
+  logic rempty;
+  logic [15:0] rdata;
+endinterface : consumer_if
+
+// ---------------------
+
